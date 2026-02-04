@@ -1,4 +1,5 @@
 #include "core/allocator.h"
+#include <algorithm>
 #include <utility>
 
 namespace infini
@@ -32,8 +33,28 @@ namespace infini
         // =================================== 作业 ===================================
         // TODO: 设计一个算法来分配内存，返回起始地址偏移量
         // =================================== 作业 ===================================
+        // First-fit allocation from free blocks.
+        for (auto it = freeBlocks.begin(); it != freeBlocks.end(); ++it)
+        {
+            auto addr = it->first;
+            auto blockSize = it->second;
+            if (blockSize < size)
+                continue;
 
-        return 0;
+            // Allocate from the beginning of this free block.
+            freeBlocks.erase(it);
+            if (blockSize > size)
+            {
+                freeBlocks.emplace(addr + size, blockSize - size);
+            }
+            return addr;
+        }
+
+        // Allocate from the end of the arena.
+        auto addr = used;
+        used += size;
+        peak = std::max(peak, used);
+        return addr;
     }
 
     void Allocator::free(size_t addr, size_t size)
@@ -44,6 +65,46 @@ namespace infini
         // =================================== 作业 ===================================
         // TODO: 设计一个算法来回收内存
         // =================================== 作业 ===================================
+        if (size == 0)
+            return;
+
+        // Insert the freed block and coalesce with neighbors.
+        auto it = freeBlocks.lower_bound(addr);
+
+        // Merge with previous if adjacent.
+        if (it != freeBlocks.begin())
+        {
+            auto pit = std::prev(it);
+            if (pit->first + pit->second == addr)
+            {
+                addr = pit->first;
+                size += pit->second;
+                freeBlocks.erase(pit);
+            }
+        }
+
+        // Merge with next if adjacent.
+        if (it != freeBlocks.end() && addr + size == it->first)
+        {
+            size += it->second;
+            freeBlocks.erase(it);
+        }
+
+        freeBlocks.emplace(addr, size);
+
+        // If the last part of the arena becomes free, shrink `used` and
+        // repeatedly trim contiguous free blocks at the end.
+        while (true)
+        {
+            auto last = freeBlocks.empty() ? freeBlocks.end()
+                                           : std::prev(freeBlocks.end());
+            if (last == freeBlocks.end())
+                break;
+            if (last->first + last->second != used)
+                break;
+            used = last->first;
+            freeBlocks.erase(last);
+        }
     }
 
     void *Allocator::getPtr()

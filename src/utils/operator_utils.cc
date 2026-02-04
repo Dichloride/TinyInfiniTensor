@@ -9,8 +9,33 @@ Shape infer_broadcast(const Shape &A, const Shape &B) {
     // TODO：对 A 和 B 进行双向广播，返回广播后的形状。
     // REF: https://github.com/onnx/onnx/blob/main/docs/Broadcasting.md
     // =================================== 作业 ===================================
-    
-    return {};
+    Shape out;
+    auto ra = static_cast<int>(A.size());
+    auto rb = static_cast<int>(B.size());
+    auto r = std::max(ra, rb);
+    out.resize(r);
+
+    for (int i = 0; i < r; ++i) {
+        // Align from the back.
+        int a = 1, b = 1;
+        if (ra - 1 - i >= 0)
+            a = A[ra - 1 - i];
+        if (rb - 1 - i >= 0)
+            b = B[rb - 1 - i];
+
+        IT_ASSERT(a > 0 && b > 0);
+        if (a == b) {
+            out[r - 1 - i] = a;
+        } else if (a == 1) {
+            out[r - 1 - i] = b;
+        } else if (b == 1) {
+            out[r - 1 - i] = a;
+        } else {
+            IT_ASSERT(false, "Incompatible broadcast shapes");
+        }
+    }
+
+    return out;
 }
 
 int get_real_axis(const int &axis, const int &rank) {
